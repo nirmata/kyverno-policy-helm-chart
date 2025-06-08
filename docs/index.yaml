@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  kyverno-policies:
+  - apiVersion: v2
+    appVersion: "1.0"
+    created: "2025-06-08T17:06:32.684507-05:00"
+    description: Kyverno policies for pod security and workload best practices
+    digest: 9471318823665219b774449b6b37bd2944f90ab648696271471d4e95573dc177
+    name: kyverno-policies
+    type: application
+    urls:
+    - https://github.com/nirmata/kyverno-policy-helm-chart/kyverno-policies-0.1.0.tgz
+    version: 0.1.0
+generated: "2025-06-08T17:06:32.683812-05:00"

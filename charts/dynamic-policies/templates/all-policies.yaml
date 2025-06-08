@@ -1,0 +1,11 @@
+{{- /*
+  Loads Kyverno policy YAMLs from the 'files/' directory as raw files.
+  Avoids template parsing and renders Helm-safe output.
+*/ -}}
+
+{{- $files := .Files.Glob "files/*.yaml" }}
+{{- range $path, $content := $files }}
+# Source: {{ $path }}
+{{ $content | toString | indent 0 }}
+---
+{{- end }}
