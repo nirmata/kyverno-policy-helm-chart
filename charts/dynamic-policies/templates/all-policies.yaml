@@ -1,11 +1,12 @@
 {{- /*
-  Loads Kyverno policy YAMLs from the 'files/' directory as raw files.
-  Avoids template parsing and renders Helm-safe output.
+  Load each policy YAML from files/, patch `validationFailureAction`, and emit valid YAML.
 */ -}}
 
 {{- $files := .Files.Glob "files/*.yaml" }}
 {{- range $path, $content := $files }}
+{{- $policy := $content | toString }}
+{{- $patched := regexReplaceAll "(?m)^([[:space:]]*)validationFailureAction:.*$" $policy (printf "${1}validationFailureAction: \"%s\"" $.Values.validationFailureAction) }}
 # Source: {{ $path }}
-{{ $content | toString | indent 0 }}
+{{ $patched | nindent 0 }}
 ---
 {{- end }}

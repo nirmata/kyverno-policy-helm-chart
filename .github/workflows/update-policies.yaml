@@ -52,8 +52,8 @@ jobs:
         if: steps.check_changes.outputs.changed == 'true'
         run: |
           mkdir -p docs
-          helm lint charts/dynamic-policies
-          helm package charts/dynamic-policies
+          helm lint charts/kyverno-policies
+          helm package charts/kyverno-policies
           mv kyverno-policies-*.tgz docs/
           helm repo index docs --url https://nirmata.github.io/kyverno-policy-helm-chart
 
