@@ -52,6 +52,15 @@ jobs:
         if: steps.check_changes.outputs.changed == 'true'
         run: |
           mkdir -p docs
+          helm lint charts/kyverno-policies --values charts/dynamic-policies/values.yaml
+          VERSION=$(grep '^version:' charts/dynamic-policies/Chart.yaml | awk '{print $2}')
+          helm package charts/dynamic-policies --version "$VERSION" -d docs/
+          helm repo index docs/ --url https://nirmata.github.io/kyverno-policy-helm-chart
+
+      - name: Package updated Helm chart
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          mkdir -p docs
           helm lint charts/kyverno-policies
           helm package charts/kyverno-policies
           mv kyverno-policies-*.tgz docs/
