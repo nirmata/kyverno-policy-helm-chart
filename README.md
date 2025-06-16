@@ -87,7 +87,7 @@ helm install kyverno-policies nirmata/custom-kyverno-cpol \
 
 #### In Enforce Mode (During the installation using a flag)
 ```bash
-helm install my-policies my-kyverno-cpol/custom-kyverno-cpol --set validationFailureAction=Enforce
+helm install kyverno-policies nirmata/custom-kyverno-cpol --namespace kyverno --create-namespace --set validationFailureAction=Enforce
 ```
 
 ## Configuration
