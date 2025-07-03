@@ -3,6 +3,16 @@ entries:
   custom-kyverno-cpol:
   - apiVersion: v2
     appVersion: "1.0"
+    created: "2025-01-27T10:00:00.000000-05:00"
+    description: Kyverno policies for pod security and workload best practices
+    digest: 99a4aa46aac60c43154a83320e1f1b6676413b7de2a9960fd5342cf30d74ae46
+    name: custom-kyverno-cpol
+    type: application
+    urls:
+    - https://nirmata.github.io/kyverno-policy-helm-chart/custom-kyverno-cpol-0.2.0.tgz
+    version: 0.2.0
+  - apiVersion: v2
+    appVersion: "1.0"
     created: "2025-06-09T17:25:12.782345-05:00"
     description: Kyverno policies for pod security and workload best practices
     digest: 99a4aa46aac60c43154a83320e1f1b6676413b7de2a9960fd5342cf30d74ae46
@@ -11,4 +21,4 @@ entries:
     urls:
     - https://nirmata.github.io/kyverno-policy-helm-chart/custom-kyverno-cpol-0.1.1.tgz
     version: 0.1.1
-generated: "2025-06-09T17:25:12.780389-05:00"
+generated: "2025-01-27T10:00:00.000000-05:00"

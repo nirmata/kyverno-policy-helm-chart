@@ -1,12 +1,20 @@
 {{- /*
-  Load each policy YAML from files/, patch `validationFailureAction`, and emit valid YAML.
+  Load each policy YAML from files/, patch `validationFailureAction`, process templated values for specific files, and emit valid YAML.
 */ -}}
 
 {{- $files := .Files.Glob "files/*.yaml" }}
 {{- range $path, $content := $files }}
 {{- $policy := $content | toString }}
 {{- $patched := regexReplaceAll "(?m)^([[:space:]]*)validationFailureAction:.*$" $policy (printf "${1}validationFailureAction: \"%s\"" $.Values.validationFailureAction) }}
+
 # Source: {{ $path }}
+{{- if eq $path "files/restrict_image_registries.yaml" }}
+{{- /* Process templated values only for restrict_image_registries.yaml */ -}}
+{{- $templated := tpl $patched $ }}
+{{ $templated | nindent 0 }}
+{{- else }}
+{{- /* For other files, just use the patched content without templating */ -}}
 {{ $patched | nindent 0 }}
+{{- end }}
 ---
 {{- end }}

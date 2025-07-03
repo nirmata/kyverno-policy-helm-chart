@@ -52,23 +52,43 @@ jobs:
         if: steps.check_changes.outputs.changed == 'true'
         run: |
           mkdir -p docs
-          helm lint charts/kyverno-policies --values charts/dynamic-policies/values.yaml
+          # Lint the chart with the new image registry configuration
+          helm lint charts/dynamic-policies --values charts/dynamic-policies/values.yaml
           VERSION=$(grep '^version:' charts/dynamic-policies/Chart.yaml | awk '{print $2}')
           helm package charts/dynamic-policies --version "$VERSION" -d docs/
           helm repo index docs/ --url https://nirmata.github.io/kyverno-policy-helm-chart
 
-      - name: Package updated Helm chart
+      - name: Test chart installation with different configurations
         if: steps.check_changes.outputs.changed == 'true'
         run: |
-          mkdir -p docs
-          helm lint charts/kyverno-policies
-          helm package charts/kyverno-policies
-          mv kyverno-policies-*.tgz docs/
-          helm repo index docs --url https://nirmata.github.io/kyverno-policy-helm-chart
+          # Test basic installation
+          helm template test-basic charts/dynamic-policies > /dev/null
+          echo "✅ Basic chart template test passed"
+          
+          # Test with custom image registries (YAML list format)
+          helm template test-custom charts/dynamic-policies \
+            --set imageRegistries.global[0]="docker.io/*" \
+            --set imageRegistries.global[1]="gcr.io/*" \
+            --set imageRegistries.initContainers[0]="docker.io/*" \
+            --set imageRegistries.initContainers[1]="gcr.io/*" \
+            --set imageRegistries.initContainers[2]="quay.io/*" \
+            --set validationFailureAction=Enforce > /dev/null
+          echo "✅ Custom image registry configuration test passed"
+          
+          # Test with legacy allowedRegistries setting
+          helm template test-legacy charts/dynamic-policies \
+            --set allowedRegistries="docker.io/* | gcr.io/*" > /dev/null
+          echo "✅ Legacy configuration test passed"
 
       - name: Commit and push updated chart and policies
         if: steps.check_changes.outputs.changed == 'true'
         run: |
-          git add dynamic-policies/ charts/dynamic-policies/Chart.yaml docs/
-          git commit -m "Update Kyverno policies and bump chart version"
+          git add charts/dynamic-policies/files/ charts/dynamic-policies/Chart.yaml docs/
+          git commit -m "Update Kyverno policies and bump chart version
+
+          - Updated restrict_image_registries policy with configurable image registries
+          - Added support for YAML list format for image registry configuration
+          - Added support for individual container type registry configuration
+          - Maintained backward compatibility with allowedRegistries setting
+          - Updated chart version to $VERSION"
           git push

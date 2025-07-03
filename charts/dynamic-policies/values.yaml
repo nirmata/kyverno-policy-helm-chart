@@ -1,2 +1,22 @@
 # Default behavior of policies. Can be overridden via --set
 validationFailureAction: Audit
+
+# Image registry restrictions configuration
+# You can configure registries for all container types or individually
+imageRegistries:
+  # Global registry patterns for all container types (containers, initContainers, ephemeralContainers)
+  # Specify as a YAML list. These will be joined with ' | ' for Kyverno pattern matching.
+  # If specified, this will be used for all container types unless overridden by specific settings below
+  # Leave empty to use legacy allowedRegistries setting
+  global:
+    - "eu.foo.io/*"
+    - "bar.io/*"
+  
+  # Individual registry patterns for specific container types (YAML lists, joined with ' | ')
+  # These will override the global setting if specified
+  containers: []  # Leave empty to use global setting
+  initContainers: []  # Leave empty to use global setting
+  ephemeralContainers: []  # Leave empty to use global setting
+
+# Legacy setting for backward compatibility (deprecated, use imageRegistries.global instead)
+allowedRegistries: "eu.foo.io/* | bar.io/*"

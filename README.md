@@ -50,7 +50,7 @@ The chart includes policies that enforce:
    - Restrict custom snippets
 
 6. **Image Security**
-   - Restrict image registries
+   - Restrict image registries (configurable per container type)
 
 ## Installation
 
@@ -73,7 +73,7 @@ Example:
 ```bash
 helm search repo my-kyverno-cpol
 NAME                                    CHART VERSION   APP VERSION     DESCRIPTION
-my-kyverno-cpol/custom-kyverno-cpol     0.1.1           1.0             Kyverno policies for pod security and workload ...
+my-kyverno-cpol/custom-kyverno-cpol     0.2.0           1.0             Kyverno policies for pod security and workload ...
 ```
 
 ### Install the Chart
@@ -97,12 +97,192 @@ The following table lists the configurable parameters of the chart and their def
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `validationFailureAction` | Action to take when policy validation fails (`Audit` or `Enforce`) | `Audit` |
+| `imageRegistries.global` | Global registry pattern for all container types | `"eu.foo.io/* \| bar.io/*"` |
+| `imageRegistries.containers` | Registry pattern for containers (overrides global) | `""` (uses global) |
+| `imageRegistries.initContainers` | Registry pattern for initContainers (overrides global) | `""` (uses global) |
+| `imageRegistries.ephemeralContainers` | Registry pattern for ephemeralContainers (overrides global) | `""` (uses global) |
+| `allowedRegistries` | Legacy setting for backward compatibility (deprecated) | `"eu.foo.io/* \| bar.io/*"` |
+
+### Image Registry Configuration Examples
+
+#### 1. Global Registry Pattern (All Container Types, Multiple Values)
+```yaml
+imageRegistries:
+  global:
+    - "docker.io/*"
+    - "gcr.io/*"
+    - "quay.io/*"
+```
+Or via Helm CLI:
+```bash
+helm install kyverno-policies nirmata/custom-kyverno-cpol \
+  --namespace kyverno \
+  --create-namespace \
+  --set imageRegistries.global[0]="docker.io/*" \
+  --set imageRegistries.global[1]="gcr.io/*" \
+  --set imageRegistries.global[2]="quay.io/*"
+```
+
+#### 2. Individual Container Type Configuration (Multiple Values)
+```yaml
+imageRegistries:
+  global:
+    - "docker.io/*"
+  containers:
+    - "docker.io/*"
+    - "gcr.io/*"
+  initContainers:
+    - "docker.io/*"
+    - "gcr.io/*"
+    - "quay.io/*"
+  ephemeralContainers:
+    - "docker.io/*"
+    - "quay.io/*"
+```
+Or via Helm CLI:
+```bash
+helm install kyverno-policies nirmata/custom-kyverno-cpol \
+  --namespace kyverno \
+  --create-namespace \
+  --set imageRegistries.global[0]="docker.io/*" \
+  --set imageRegistries.containers[0]="docker.io/*" \
+  --set imageRegistries.containers[1]="gcr.io/*" \
+  --set imageRegistries.initContainers[0]="docker.io/*" \
+  --set imageRegistries.initContainers[1]="gcr.io/*" \
+  --set imageRegistries.initContainers[2]="quay.io/*" \
+  --set imageRegistries.ephemeralContainers[0]="docker.io/*" \
+  --set imageRegistries.ephemeralContainers[1]="quay.io/*"
+```
+
+#### 3. Mixed Configuration (Some Global, Some Specific, All as Lists)
+```yaml
+imageRegistries:
+  global:
+    - "docker.io/*"
+    - "gcr.io/*"
+  containers:
+    - "docker.io/*"
+  initContainers: []
+  ephemeralContainers:
+    - "quay.io/*"
+```
+Or via Helm CLI:
+```bash
+helm install kyverno-policies nirmata/custom-kyverno-cpol \
+  --namespace kyverno \
+  --create-namespace \
+  --set imageRegistries.global[0]="docker.io/*" \
+  --set imageRegistries.global[1]="gcr.io/*" \
+  --set imageRegistries.containers[0]="docker.io/*" \
+  --set imageRegistries.ephemeralContainers[0]="quay.io/*"
+```
+
+#### 4. Using Values File
+Create a `values.yaml` file:
+```yaml
+validationFailureAction: Enforce
+imageRegistries:
+  global: "docker.io/* | gcr.io/* | eu.gcr.io/*"
+  containers: "docker.io/* | gcr.io/*"
+  initContainers: "docker.io/* | gcr.io/* | quay.io/*"
+  ephemeralContainers: "docker.io/*"
+```
+
+Then install:
+```bash
+helm install kyverno-policies nirmata/custom-kyverno-cpol \
+  --namespace kyverno \
+  --create-namespace \
+  -f values.yaml
+```
 
 ### Example Configuration
 
 ```yaml
 validationFailureAction: Enforce
+imageRegistries:
+  global: "docker.io/* | gcr.io/* | eu.gcr.io/*"
+  containers: "docker.io/* | gcr.io/*"
+  initContainers: "docker.io/* | gcr.io/* | quay.io/*"
+  ephemeralContainers: "docker.io/*"
 ```
+
+## Testing
+
+### Automated Testing Script
+
+A comprehensive testing script is provided to validate the image registry configuration functionality:
+
+```bash
+# Make the script executable
+chmod +x test-image-registry-config.sh
+
+# Run the automated tests
+./test-image-registry-config.sh
+```
+
+The testing script validates:
+- Default configuration behavior
+- Legacy `allowedRegistries` compatibility
+- Global `imageRegistries.global` configuration
+- Per-container-type configurations
+- Mixed configurations
+- Enforce mode functionality
+
+### Manual Testing
+
+You can also test configurations manually:
+
+#### 1. Test Chart Rendering
+```bash
+# Test with default values
+helm template test charts/dynamic-policies
+
+# Test with custom image registries
+helm template test charts/dynamic-policies \
+  --set imageRegistries.global="docker.io/* | gcr.io/*" \
+  --set imageRegistries.initContainers="docker.io/* | gcr.io/* | quay.io/*"
+
+# Test with legacy setting
+helm template test charts/dynamic-policies \
+  --set allowedRegistries="docker.io/* | gcr.io/*"
+```
+
+#### 2. Test Chart Linting
+```bash
+helm lint charts/dynamic-policies --values charts/dynamic-policies/values.yaml
+```
+
+#### 3. Test Installation (Dry Run)
+```bash
+helm install kyverno-policies charts/dynamic-policies \
+  --namespace kyverno \
+  --create-namespace \
+  --dry-run \
+  --set imageRegistries.global="docker.io/* | gcr.io/*"
+```
+
+## Recent Changes
+
+### Version 0.2.0 - Enhanced Image Registry Configuration
+
+**New Features:**
+- **Configurable Image Registries**: The `restrict_image_registries` policy now supports flexible configuration for different container types
+- **Per-Container-Type Control**: Configure different registry patterns for `containers`, `initContainers`, and `ephemeralContainers`
+- **Backward Compatibility**: Legacy `allowedRegistries` setting is still supported
+- **Enhanced Templating**: Improved Helm template processing for dynamic policy configuration
+
+**Configuration Options:**
+- `imageRegistries.global`: Set registry pattern for all container types
+- `imageRegistries.containers`: Override for regular containers
+- `imageRegistries.initContainers`: Override for init containers
+- `imageRegistries.ephemeralContainers`: Override for ephemeral containers
+- `allowedRegistries`: Legacy setting (deprecated but supported)
+
+**Testing:**
+- Added comprehensive testing script (`test-image-registry-config.sh`)
+- Automated validation of all configuration scenarios
+- Manual testing instructions provided
 
 ## Policy Details
 
@@ -126,7 +306,7 @@ The chart includes the following policies:
 16. `disallow_cri_sock_mount.yaml`: Prevents CRI socket mounts
 17. `disallow-default-namespace.yaml`: Prevents default namespace usage
 18. `disallow-custom-snippets.yaml`: Restricts custom snippets
-19. `restrict_image_registries.yaml`: Restricts image registries
+19. `restrict_image_registries.yaml`: Restricts image registries (configurable per container type)
 20. `disallow-host-namespaces.yaml`: Prevents host namespace usage
 21. `disallow-proc-mount.yaml`: Prevents proc mount usage
 22. `disallow-selinux.yaml`: Prevents SELinux usage
@@ -140,5 +320,3 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
-5. Install in Enforce mode (example):
-`helm install my-policies my-kyverno-cpol/custom-kyverno-cpol --set validationFailureAction=Enforce`

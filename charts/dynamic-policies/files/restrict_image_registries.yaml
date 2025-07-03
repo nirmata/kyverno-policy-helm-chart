@@ -13,10 +13,10 @@ metadata:
       Images from unknown, public registries can be of dubious quality and may not be
       scanned and secured, representing a high degree of risk. Requiring use of known, approved
       registries helps reduce threat exposure by ensuring image pulls only come from them. This
-      policy validates that container images only originate from the registry `eu.foo.io` or
-      `bar.io`. Use of this policy requires customization to define your allowable registries.
+      policy validates that container images only originate from the configured allowed registries.
+      Use of this policy requires customization to define your allowable registries via Helm values.
 spec:
-  validationFailureAction: Audit
+  validationFailureAction: {{ .Values.validationFailureAction | quote }}
   background: true
   rules:
   - name: validate-registries
@@ -26,12 +26,12 @@ spec:
           kinds:
           - Pod
     validate:
-      message: "Unknown image registry."
+      message: "Unknown image registry. Allowed registries: {{ if .Values.imageRegistries.ephemeralContainers }}{{ .Values.imageRegistries.ephemeralContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }} for ephemeralContainers, {{ if .Values.imageRegistries.initContainers }}{{ .Values.imageRegistries.initContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }} for initContainers, {{ if .Values.imageRegistries.containers }}{{ .Values.imageRegistries.containers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }} for containers"
       pattern:
         spec:
           =(ephemeralContainers):
-          - image: "eu.foo.io/* | bar.io/*"
+          - image: "{{ if .Values.imageRegistries.ephemeralContainers }}{{ .Values.imageRegistries.ephemeralContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }}"
           =(initContainers):
-          - image: "eu.foo.io/* | bar.io/*"
+          - image: "{{ if .Values.imageRegistries.initContainers }}{{ .Values.imageRegistries.initContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }}"
           containers:
-          - image: "eu.foo.io/* | bar.io/*"
+          - image: "{{ if .Values.imageRegistries.containers }}{{ .Values.imageRegistries.containers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }}"
