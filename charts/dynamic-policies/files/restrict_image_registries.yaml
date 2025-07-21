@@ -26,12 +26,12 @@ spec:
           kinds:
           - Pod
     validate:
-      message: "Unknown image registry. Allowed registries: {{ if .Values.imageRegistries.ephemeralContainers }}{{ .Values.imageRegistries.ephemeralContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }} for ephemeralContainers, {{ if .Values.imageRegistries.initContainers }}{{ .Values.imageRegistries.initContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }} for initContainers, {{ if .Values.imageRegistries.containers }}{{ .Values.imageRegistries.containers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }} for containers"
+      message: "Unknown image registry. Allowed registries: {{ include \"imageRegistries.pattern\" (dict \"type\" \"global\" \"values\" .Values) }}"
       pattern:
         spec:
           =(ephemeralContainers):
-          - image: "{{ if .Values.imageRegistries.ephemeralContainers }}{{ .Values.imageRegistries.ephemeralContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }}"
+          - image: "{{ include \"imageRegistries.pattern\" (dict \"type\" \"ephemeralContainers\" \"values\" .Values) }}"
           =(initContainers):
-          - image: "{{ if .Values.imageRegistries.initContainers }}{{ .Values.imageRegistries.initContainers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }}"
+          - image: "{{ include \"imageRegistries.pattern\" (dict \"type\" \"initContainers\" \"values\" .Values) }}"
           containers:
-          - image: "{{ if .Values.imageRegistries.containers }}{{ .Values.imageRegistries.containers }}{{ else if .Values.imageRegistries.global }}{{ .Values.imageRegistries.global }}{{ else }}{{ .Values.allowedRegistries }}{{ end }}"
+          - image: "{{ include \"imageRegistries.pattern\" (dict \"type\" \"containers\" \"values\" .Values) }}"

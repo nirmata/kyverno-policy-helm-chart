@@ -1,0 +1,168 @@
+name: Manual Helm Chart Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Chart version to release (e.g., 0.3.0)'
+        required: true
+        default: '0.3.0'
+      release_notes:
+        description: 'Release notes for this version'
+        required: false
+        default: 'Updated Kyverno policies to latest versions'
+
+jobs:
+  create-helm-chart:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Git identity
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Download latest Kyverno policies
+        run: |
+          chmod +x ./scripts/download-policies.sh
+          ./scripts/download-policies.sh
+
+      - name: Update Chart version
+        run: |
+          CHART_FILE="charts/dynamic-policies/Chart.yaml"
+          NEW_VERSION="${{ github.event.inputs.version }}"
+          
+          echo "Updating chart version to $NEW_VERSION"
+          sed -i "s/^version: .*/version: $NEW_VERSION/" "$CHART_FILE"
+          
+          # Update appVersion to current date
+          CURRENT_DATE=$(date +%Y-%m-%d)
+          sed -i "s/^appVersion: .*/appVersion: \"$CURRENT_DATE\"/" "$CHART_FILE"
+          
+          echo "Chart version updated to $NEW_VERSION"
+          echo "App version updated to $CURRENT_DATE"
+
+      - name: Lint Helm chart
+        run: |
+          helm lint charts/dynamic-policies --strict
+          echo "✅ Chart linting passed"
+
+      - name: Package Helm chart
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          mkdir -p docs
+          
+          echo "Packaging chart version $VERSION..."
+          helm package charts/dynamic-policies --version "$VERSION" -d docs/
+          
+          # Verify the package was created
+          PACKAGE_FILE="docs/custom-kyverno-cpol-$VERSION.tgz"
+          if [ -f "$PACKAGE_FILE" ]; then
+            echo "✅ Chart packaged successfully: $PACKAGE_FILE"
+            ls -la docs/
+          else
+            echo "❌ Chart package not found"
+            exit 1
+          fi
+
+      - name: Update Helm repository index
+        run: |
+          echo "Updating Helm repository index..."
+          helm repo index docs/ --url https://nirmata.github.io/kyverno-policy-helm-chart
+          echo "✅ Repository index updated"
+
+      - name: Test chart installation
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "Testing chart installation..."
+          
+          # Test basic installation
+          helm template test-basic charts/dynamic-policies > /dev/null
+          echo "✅ Basic chart template test passed"
+          
+          # Test with custom values
+          helm template test-custom charts/dynamic-policies \
+            --set validationFailureAction=Enforce \
+            --set imageRegistries.global[0]="docker.io/*" \
+            --set imageRegistries.global[1]="gcr.io/*" > /dev/null
+          echo "✅ Custom values test passed"
+          
+          # Test with legacy configuration
+          helm template test-legacy charts/dynamic-policies \
+            --set allowedRegistries="docker.io/* | gcr.io/*" > /dev/null
+          echo "✅ Legacy configuration test passed"
+
+      - name: Create release commit
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          RELEASE_NOTES="${{ github.event.inputs.release_notes }}"
+          
+          git add charts/dynamic-policies/Chart.yaml charts/dynamic-policies/files/ docs/
+          
+          git commit -m "Release Helm chart version $VERSION
+
+          $RELEASE_NOTES
+          
+          - Updated Kyverno policies to latest versions
+          - Chart version: $VERSION
+          - App version: $(date +%Y-%m-%d)
+          
+          Changes:
+          - Downloaded latest policies from nirmata/kyverno-policies
+          - Updated chart version and app version
+          - Generated new Helm package and repository index"
+          
+          git push
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.event.inputs.version }}
+          release_name: Helm Chart v${{ github.event.inputs.version }}
+          body: |
+            ## Helm Chart Release v${{ github.event.inputs.version }}
+            
+            ${{ github.event.inputs.release_notes }}
+            
+            ### What's Changed
+            - Updated Kyverno policies to latest versions
+            - Chart version: ${{ github.event.inputs.version }}
+            - App version: $(date +%Y-%m-%d)
+            
+            ### Installation
+            ```bash
+            helm repo add nirmata https://nirmata.github.io/kyverno-policy-helm-chart
+            helm repo update
+            helm install kyverno-policies nirmata/custom-kyverno-cpol --version ${{ github.event.inputs.version }}
+            ```
+            
+            ### Chart Files
+            - [custom-kyverno-cpol-${{ github.event.inputs.version }}.tgz](https://github.com/nirmata/kyverno-policy-helm-chart/releases/download/v${{ github.event.inputs.version }}/custom-kyverno-cpol-${{ github.event.inputs.version }}.tgz)
+          draft: false
+          prerelease: false
+
+      - name: Upload chart package to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./docs/custom-kyverno-cpol-${{ github.event.inputs.version }}.tgz
+          asset_name: custom-kyverno-cpol-${{ github.event.inputs.version }}.tgz
+          asset_content_type: application/gzip
+
+      - name: Summary
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "🎉 Helm chart release completed successfully!"
+          echo "📦 Chart version: $VERSION"
+          echo "📁 Package: docs/custom-kyverno-cpol-$VERSION.tgz"
+          echo "🔗 Repository index: docs/index.yaml"
+          echo "📋 Release: https://github.com/nirmata/kyverno-policy-helm-chart/releases/tag/v$VERSION" 

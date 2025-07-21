@@ -105,25 +105,27 @@ The following table lists the configurable parameters of the chart and their def
 
 ### Image Registry Configuration Examples
 
-#### 1. Global Registry Pattern (All Container Types, Multiple Values)
+**Important**: The `imageRegistries` configuration expects YAML lists that will be automatically joined with ` | ` for Kyverno pattern matching. Do not include the ` | ` separator in your configuration.
+
+#### 1. Global Registry Pattern (All Container Types)
 ```yaml
 imageRegistries:
   global:
-    - "docker.io/*"
-    - "gcr.io/*"
-    - "quay.io/*"
+    - "tcr.paas.local:50??/*"
+    - "tcr.paas.local:60??/*"
+    - "tcr.paas.local:70??/*"
 ```
 Or via Helm CLI:
 ```bash
 helm install kyverno-policies nirmata/custom-kyverno-cpol \
   --namespace kyverno \
   --create-namespace \
-  --set imageRegistries.global[0]="docker.io/*" \
-  --set imageRegistries.global[1]="gcr.io/*" \
-  --set imageRegistries.global[2]="quay.io/*"
+  --set imageRegistries.global[0]="tcr.paas.local:50??/*" \
+  --set imageRegistries.global[1]="tcr.paas.local:60??/*" \
+  --set imageRegistries.global[2]="tcr.paas.local:70??/*"
 ```
 
-#### 2. Individual Container Type Configuration (Multiple Values)
+#### 2. Individual Container Type Configuration
 ```yaml
 imageRegistries:
   global:
@@ -139,22 +141,8 @@ imageRegistries:
     - "docker.io/*"
     - "quay.io/*"
 ```
-Or via Helm CLI:
-```bash
-helm install kyverno-policies nirmata/custom-kyverno-cpol \
-  --namespace kyverno \
-  --create-namespace \
-  --set imageRegistries.global[0]="docker.io/*" \
-  --set imageRegistries.containers[0]="docker.io/*" \
-  --set imageRegistries.containers[1]="gcr.io/*" \
-  --set imageRegistries.initContainers[0]="docker.io/*" \
-  --set imageRegistries.initContainers[1]="gcr.io/*" \
-  --set imageRegistries.initContainers[2]="quay.io/*" \
-  --set imageRegistries.ephemeralContainers[0]="docker.io/*" \
-  --set imageRegistries.ephemeralContainers[1]="quay.io/*"
-```
 
-#### 3. Mixed Configuration (Some Global, Some Specific, All as Lists)
+#### 3. Mixed Configuration
 ```yaml
 imageRegistries:
   global:
@@ -166,45 +154,64 @@ imageRegistries:
   ephemeralContainers:
     - "quay.io/*"
 ```
-Or via Helm CLI:
-```bash
-helm install kyverno-policies nirmata/custom-kyverno-cpol \
-  --namespace kyverno \
-  --create-namespace \
-  --set imageRegistries.global[0]="docker.io/*" \
-  --set imageRegistries.global[1]="gcr.io/*" \
-  --set imageRegistries.containers[0]="docker.io/*" \
-  --set imageRegistries.ephemeralContainers[0]="quay.io/*"
-```
 
-#### 4. Using Values File
-Create a `values.yaml` file:
+#### 4. Using Legacy allowedRegistries (Deprecated but Supported)
 ```yaml
-validationFailureAction: Enforce
-imageRegistries:
-  global: "docker.io/* | gcr.io/* | eu.gcr.io/*"
-  containers: "docker.io/* | gcr.io/*"
-  initContainers: "docker.io/* | gcr.io/* | quay.io/*"
-  ephemeralContainers: "docker.io/*"
+allowedRegistries: "docker.io/* | gcr.io/* | eu.gcr.io/*"
 ```
 
-Then install:
-```bash
-helm install kyverno-policies nirmata/custom-kyverno-cpol \
-  --namespace kyverno \
-  --create-namespace \
-  -f values.yaml
-```
+### Common Configuration Patterns
 
-### Example Configuration
-
+#### For Enterprise Registries with Port Numbers
 ```yaml
-validationFailureAction: Enforce
 imageRegistries:
-  global: "docker.io/* | gcr.io/* | eu.gcr.io/*"
-  containers: "docker.io/* | gcr.io/*"
-  initContainers: "docker.io/* | gcr.io/* | quay.io/*"
-  ephemeralContainers: "docker.io/*"
+  global:
+    - "registry.company.com:5000/*"
+    - "registry.company.com:6000/*"
+    - "registry.company.com:7000/*"
+```
+
+#### For Multiple Registry Types
+```yaml
+imageRegistries:
+  global:
+    - "docker.io/*"
+    - "gcr.io/*"
+    - "quay.io/*"
+    - "registry.company.com/*"
+```
+
+#### For Specific Container Types Only
+```yaml
+imageRegistries:
+  containers:
+    - "docker.io/*"
+    - "gcr.io/*"
+  initContainers:
+    - "docker.io/*"
+  ephemeralContainers: []
+```
+
+### Troubleshooting
+
+**Error**: `Unknown image registry. Allowed registries: [tcr.paas.local:50??/* | tcr.paas.local:60??/* |tcr.paas.local:70??/*]`
+
+**Cause**: You're passing a single string with ` | ` separators instead of a YAML list.
+
+**Incorrect**:
+```yaml
+imageRegistries:
+  global:
+    - "tcr.paas.local:50??/* | tcr.paas.local:60??/* | tcr.paas.local:70??/*"
+```
+
+**Correct**:
+```yaml
+imageRegistries:
+  global:
+    - "tcr.paas.local:50??/*"
+    - "tcr.paas.local:60??/*"
+    - "tcr.paas.local:70??/*"
 ```
 
 ## Testing
@@ -238,10 +245,13 @@ You can also test configurations manually:
 # Test with default values
 helm template test charts/dynamic-policies
 
-# Test with custom image registries
+# Test with custom image registries (using YAML lists)
 helm template test charts/dynamic-policies \
-  --set imageRegistries.global="docker.io/* | gcr.io/*" \
-  --set imageRegistries.initContainers="docker.io/* | gcr.io/* | quay.io/*"
+  --set imageRegistries.global[0]="docker.io/*" \
+  --set imageRegistries.global[1]="gcr.io/*" \
+  --set imageRegistries.initContainers[0]="docker.io/*" \
+  --set imageRegistries.initContainers[1]="gcr.io/*" \
+  --set imageRegistries.initContainers[2]="quay.io/*"
 
 # Test with legacy setting
 helm template test charts/dynamic-policies \
@@ -259,10 +269,38 @@ helm install kyverno-policies charts/dynamic-policies \
   --namespace kyverno \
   --create-namespace \
   --dry-run \
-  --set imageRegistries.global="docker.io/* | gcr.io/*"
+  --set imageRegistries.global[0]="docker.io/*" \
+  --set imageRegistries.global[1]="gcr.io/*"
 ```
 
 ## Recent Changes
+
+### Version 0.2.1 - Fixed Image Registry Configuration
+
+**Bug Fixes:**
+- **Fixed YAML List Processing**: The `restrict_image_registries` policy now properly handles YAML lists for `imageRegistries` configuration
+- **Corrected Template Logic**: Added proper `join` function to convert YAML lists to Kyverno pattern format
+- **Improved Error Messages**: Better error messages that show the actual allowed registries
+
+**Configuration Fix:**
+- **YAML Lists Required**: `imageRegistries.global`, `imageRegistries.containers`, etc. now expect YAML lists
+- **Automatic Joining**: Lists are automatically joined with ` | ` for Kyverno pattern matching
+- **Clear Documentation**: Added troubleshooting section and examples
+
+**Example Fix:**
+```yaml
+# Before (Incorrect - caused validation errors)
+imageRegistries:
+  global:
+    - "tcr.paas.local:50??/* | tcr.paas.local:60??/* | tcr.paas.local:70??/*"
+
+# After (Correct - works properly)
+imageRegistries:
+  global:
+    - "tcr.paas.local:50??/*"
+    - "tcr.paas.local:60??/*"
+    - "tcr.paas.local:70??/*"
+```
 
 ### Version 0.2.0 - Enhanced Image Registry Configuration
 

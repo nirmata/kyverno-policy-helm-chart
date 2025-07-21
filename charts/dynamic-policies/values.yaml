@@ -8,15 +8,21 @@ imageRegistries:
   # Specify as a YAML list. These will be joined with ' | ' for Kyverno pattern matching.
   # If specified, this will be used for all container types unless overridden by specific settings below
   # Leave empty to use legacy allowedRegistries setting
+  # 
+  # IMPORTANT: Use YAML lists, NOT strings with ' | ' separators
+  # Correct: [ "registry1.com/*", "registry2.com/*" ]
+  # Incorrect: [ "registry1.com/* | registry2.com/*" ]
   global:
     - "eu.foo.io/*"
     - "bar.io/*"
   
   # Individual registry patterns for specific container types (YAML lists, joined with ' | ')
   # These will override the global setting if specified
+  # Leave empty to use global setting
   containers: []  # Leave empty to use global setting
   initContainers: []  # Leave empty to use global setting
   ephemeralContainers: []  # Leave empty to use global setting
 
 # Legacy setting for backward compatibility (deprecated, use imageRegistries.global instead)
+# This setting expects a string with ' | ' separators
 allowedRegistries: "eu.foo.io/* | bar.io/*"
