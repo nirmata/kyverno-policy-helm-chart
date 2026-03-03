@@ -9,6 +9,7 @@ A Helm chart that deploys Kyverno policies for security best practices and workl
 
 ## Installation
 
+Increase the validatingwebhook and mutatingwebhook values from the default 10sec to 30seconds.
 ```bash
 kubectl patch validatingwebhookconfiguration kyverno-policy-validating-webhook-cfg --type='json' -p='[{"op": "replace", "path": "/webhooks/0/timeoutSeconds", "value": 30}]'
 
