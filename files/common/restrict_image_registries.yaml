@@ -16,7 +16,7 @@ metadata:
       policy validates that container images only originate from the configured allowed registries.
       Use of this policy requires customization to define your allowable registries via Helm values.
 spec:
-  validationFailureAction: {{ .Values.validationFailureAction | quote }}
+  validationFailureAction: __VALIDATION_FAILURE_ACTION__
   background: true
   rules:
   - name: validate-registries
@@ -26,12 +26,12 @@ spec:
           kinds:
           - Pod
     validate:
-      message: "Unknown image registry. Allowed registries: {{ include \"imageRegistries.pattern\" (dict \"type\" \"global\" \"values\" .Values) }}"
+      message: "Unknown image registry. Allowed registries: __GLOBAL_PATTERN__"
       pattern:
         spec:
           =(ephemeralContainers):
-          - image: "{{ include \"imageRegistries.pattern\" (dict \"type\" \"ephemeralContainers\" \"values\" .Values) }}"
+          - image: "__EPHEMERAL_CONTAINERS_PATTERN__"
           =(initContainers):
-          - image: "{{ include \"imageRegistries.pattern\" (dict \"type\" \"initContainers\" \"values\" .Values) }}"
+          - image: "__INIT_CONTAINERS_PATTERN__"
           containers:
-          - image: "{{ include \"imageRegistries.pattern\" (dict \"type\" \"containers\" \"values\" .Values) }}"
+          - image: "__CONTAINERS_PATTERN__"

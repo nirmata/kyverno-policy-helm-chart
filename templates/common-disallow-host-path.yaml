@@ -1,0 +1,2 @@
+{{- $c := .Files.Get "files/common/disallow-host-path.yaml" }}
+{{ trim (include "kyverno-policy.patchValidationFailureAction" (dict "content" ($c | toString) "context" .)) }}

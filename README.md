@@ -1,360 +1,259 @@
-# Custom-Kyverno-cpol-helm-chart
-
 # Kyverno Policy Helm Chart
 
-This repository contains a Helm chart for deploying Kyverno policies that enforce security best practices and workload standards in Kubernetes clusters.
+A Helm chart that deploys Kyverno policies for security best practices and workload standards in Kubernetes. You can install **common policies only**, or **common + production** policies, or **common + non-production** policies.
 
-## Overview
+## Prerequisites
 
-The Helm chart provides a collection of Kyverno policies that help enforce security best practices, workload standards, and operational requirements in Kubernetes clusters. These policies are designed to be easily deployable and configurable through Helm.
-
-## Features
-
-The chart includes policies that enforce:
-
-- Pod Security Standards
-- Workload Best Practices
-- Network Security
-- Resource Management
-- Container Security
-- Namespace Management
-
-### Key Policy Categories
-
-1. **Container Security**
-   - Disallow privileged containers
-   - Prevent privilege escalation
-   - Enforce non-root user execution
-   - Restrict container capabilities
-   - Enforce AppArmor profiles
-   - Restrict seccomp profiles
-
-2. **Resource Management**
-   - Require resource requests and limits
-   - Enforce liveness and readiness probes
-   - Restrict control plane scheduling
-
-3. **Network Security**
-   - Restrict NodePort usage
-   - Disallow host ports
-   - Restrict external IPs
-   - Validate ingress host configurations
-
-4. **Storage Security**
-   - Disallow host path volumes
-   - Restrict volume types
-   - Prevent CRI socket mounts
-
-5. **Namespace Management**
-   - Disallow default namespace usage
-   - Restrict custom snippets
-
-6. **Image Security**
-   - Restrict image registries (configurable per container type)
+- Kubernetes cluster with **Kyverno** already installed
+- **Helm 3**
 
 ## Installation
 
-### Prerequisites
+```bash
+kubectl patch validatingwebhookconfiguration kyverno-policy-validating-webhook-cfg --type='json' -p='[{"op": "replace", "path": "/webhooks/0/timeoutSeconds", "value": 30}]'
 
-- Kubernetes cluster
-- Helm
-- Kyverno installed in the cluster
+kubectl patch mutatingwebhookconfiguration kyverno-policy-mutating-webhook-cfg --type='json' -p='[{"op": "replace", "path": "/webhooks/0/timeoutSeconds", "value": 30}]'
+```
 
-### Add the Helm Repository
+### From a Helm repository
 
 ```bash
 helm repo add my-kyverno-cpol https://nirmata.github.io/kyverno-policy-helm-chart
 helm repo update
+helm install kyverno-policies my-kyverno-cpol/custom-kyverno-cpol --namespace kyverno --timeout=300s
 ```
 
-### Fetch the Charts
-`helm search repo my-kyverno-cpol`
-Example:
+For **common only** or **common + non-production**, add the same `--set` flags as in the local path examples below (e.g. `--set installProfilePolicies=false` or `--set policyProfile=non-production`).
+
+### From the chart in this repo (local path)
+
+Run from the repository root (this directory is the chart). Choose one of the three installation options below.
+
+---
+
+### How to install: choose one of three policy sets
+
+You can install one of three combinations. Use the command that matches what you want.
+
+| What you want | Policies installed | Approx. count |
+|---------------|--------------------|----------------|
+| **Common only** | Baseline security only (`files/common/`) | 9 |
+| **Common + production** | Common + production-only policies (stricter, full compliance) | 25 |
+| **Common + non-production** | Common + non-production-only policies (lighter, dev/test) | 10 |
+
+---
+
+#### 1. Common policies only
+
+Installs only the shared baseline policies (e.g. image registry, capabilities, default namespace). No production or non-production profile policies.
+
 ```bash
-helm search repo my-kyverno-cpol
-NAME                                    CHART VERSION   APP VERSION     DESCRIPTION
-my-kyverno-cpol/custom-kyverno-cpol     0.2.0           1.0             Kyverno policies for pod security and workload ...
+helm install kyverno-policies . --namespace kyverno --set installProfilePolicies=false --timeout=300s
 ```
 
-### Install the Chart
+**Example:** After install, `kubectl get cpol` shows 9 policies (e.g. `disallow-capabilities`, `disallow-default-namespace`, `restrict-image-registries`, …).
 
-#### In Audit Mode (Default)
+---
+
+#### 2. Common + production policies
+
+Installs common policies plus all production-only policies (stricter set for full compliance). This is the **default** if you do not set `policyProfile`.
+
 ```bash
-helm install kyverno-policies nirmata/custom-kyverno-cpol \
-  --namespace kyverno \
-  --create-namespace
+helm install kyverno-policies . --namespace kyverno --timeout=300s
 ```
 
-#### In Enforce Mode (During the installation using a flag)
+Or explicitly:
+
 ```bash
-helm install kyverno-policies nirmata/custom-kyverno-cpol --namespace kyverno --create-namespace --set validationFailureAction=Enforce
+helm install kyverno-policies . --namespace kyverno --set installProfilePolicies=true --set policyProfile=production --timeout=300s
 ```
+
+**Example:** After install, `kubectl get cpol` shows 25 policies (9 common + 16 production, e.g. `require-requests-limits`, `restrict-nodeport`, `disallow-host-ports`, …).
+
+---
+
+#### 3. Common + non-production policies
+
+Installs common policies plus non-production-only policies (lighter set for dev/test).
+
+```bash
+helm install kyverno-policies . --namespace kyverno --set policyProfile=non-production --timeout=300s
+```
+
+**Example:** After install, `kubectl get cpol` shows 10 policies (9 common + 2 non-production: `require-pod-probes`, `require-requests-limits`).
+
+---
+
+#### Switching after install
+
+To change what is installed (e.g. from common+production to common only, or to non-production), use `helm upgrade` with the same flags you would use for a fresh install:
+
+```bash
+# Switch to common only
+helm upgrade kyverno-policies . --namespace kyverno --set installProfilePolicies=false
+
+# Switch to common + production
+helm upgrade kyverno-policies . --namespace kyverno --set installProfilePolicies=true --set policyProfile=production
+
+# Switch to common + non-production
+helm upgrade kyverno-policies . --namespace kyverno --set policyProfile=non-production
+```
+
+### Audit vs Enforce
+
+Policies default to **Audit** (report only). To **Enforce** (block violating resources):
+
+```bash
+helm install kyverno-policies . --namespace kyverno --set validationFailureAction=Enforce --timeout=300s
+```
+
+---
+
+## How policy installation works
+
+- **Common** policies (`files/common/`) are always installed. They are the shared baseline (e.g. image registry, capabilities, default namespace).
+- **Profile** policies are optional. When **`installProfilePolicies`** is `true` (default), the chart also installs either production or non-production policies, depending on **`policyProfile`**.
+
+| `installProfilePolicies` | `policyProfile`   | What gets installed                                      |
+|--------------------------|-------------------|----------------------------------------------------------|
+| `false`                  | (ignored)         | **Common** policies only                                 |
+| `true`                   | `production`      | **Common** + **Production-only** policies                 |
+| `true`                   | `non-production`  | **Common** + **Non-production-only** policies             |
+
+Production-only and non-production-only policies live in `files/production/` and `files/non-production/`; only the folder matching `policyProfile` is used when profile policies are installed.
+
+---
 
 ## Configuration
 
-The following table lists the configurable parameters of the chart and their default values.
-
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `validationFailureAction` | Action to take when policy validation fails (`Audit` or `Enforce`) | `Audit` |
-| `imageRegistries.global` | Global registry pattern for all container types | `"eu.foo.io/* \| bar.io/*"` |
-| `imageRegistries.containers` | Registry pattern for containers (overrides global) | `""` (uses global) |
-| `imageRegistries.initContainers` | Registry pattern for initContainers (overrides global) | `""` (uses global) |
-| `imageRegistries.ephemeralContainers` | Registry pattern for ephemeralContainers (overrides global) | `""` (uses global) |
-| `allowedRegistries` | Legacy setting for backward compatibility (deprecated) | `"eu.foo.io/* \| bar.io/*"` |
+| `installProfilePolicies` | Install profile (production/non-production) policies in addition to common | `true` |
+| `policyProfile` | `production` or `non-production` (used when `installProfilePolicies` is true) | `production` |
+| `validationFailureAction` | `Audit` (report) or `Enforce` (block) | `Audit` |
+| `imageRegistries.global` | Allowed image registries for all container types (YAML list) | See `values.yaml` |
+| `imageRegistries.containers` | Override for containers | `[]` (uses global) |
+| `imageRegistries.initContainers` | Override for initContainers | `[]` (uses global) |
+| `imageRegistries.ephemeralContainers` | Override for ephemeralContainers | `[]` (uses global) |
+| `allowedRegistries` | Legacy single string (deprecated) | See `values.yaml` |
 
-### Image Registry Configuration Examples
+Configure via `values.yaml` or `--set`:
 
-**Important**: The `imageRegistries` configuration expects YAML lists that will be automatically joined with ` | ` for Kyverno pattern matching. Do not include the ` | ` separator in your configuration.
-
-#### 1. Global Registry Pattern (All Container Types)
 ```yaml
-imageRegistries:
-  global:
-    - "tcr.paas.local:50??/*"
-    - "tcr.paas.local:60??/*"
-    - "tcr.paas.local:70??/*"
-```
-Or via Helm CLI:
-```bash
-helm install kyverno-policies nirmata/custom-kyverno-cpol \
-  --namespace kyverno \
-  --create-namespace \
-  --set imageRegistries.global[0]="tcr.paas.local:50??/*" \
-  --set imageRegistries.global[1]="tcr.paas.local:60??/*" \
-  --set imageRegistries.global[2]="tcr.paas.local:70??/*"
-```
-
-#### 2. Individual Container Type Configuration
-```yaml
-imageRegistries:
-  global:
-    - "docker.io/*"
-  containers:
-    - "docker.io/*"
-    - "gcr.io/*"
-  initContainers:
-    - "docker.io/*"
-    - "gcr.io/*"
-    - "quay.io/*"
-  ephemeralContainers:
-    - "docker.io/*"
-    - "quay.io/*"
-```
-
-#### 3. Mixed Configuration
-```yaml
+# values.yaml
+policyProfile: non-production
+validationFailureAction: Enforce
 imageRegistries:
   global:
     - "docker.io/*"
     - "gcr.io/*"
-  containers:
-    - "docker.io/*"
-  initContainers: []
-  ephemeralContainers:
-    - "quay.io/*"
 ```
 
-#### 4. Using Legacy allowedRegistries (Deprecated but Supported)
+---
+
+## Adding more Kyverno policies
+
+Policies are plain YAML files in the chart. Add a new **`.yaml` file** in the right folder; no template or values changes are required.
+
+### Policy folders
+
+| Folder | When used | Use for |
+|--------|-----------|--------|
+| `files/common/` | Always | Policies shared by all installs (common-only, production, non-production) |
+| `files/production/` | When `installProfilePolicies: true` and `policyProfile: production` | Production-only policies |
+| `files/non-production/` | When `installProfilePolicies: true` and `policyProfile: non-production` | Non-production-only policies |
+
+### Add a production-only policy
+
+1. Create a new file: `files/production/<your-policy-name>.yaml`
+2. Put a valid Kyverno **ClusterPolicy** in it. Include `spec.validationFailureAction` (the chart overwrites it from `values.yaml`):
+
 ```yaml
-allowedRegistries: "docker.io/* | gcr.io/* | eu.gcr.io/*"
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: my-production-policy
+spec:
+  validationFailureAction: Audit
+  rules:
+    # your rules
 ```
 
-### Common Configuration Patterns
+3. Install or upgrade with production profile; the new policy is included automatically.
 
-#### For Enterprise Registries with Port Numbers
+### Add a non-production-only policy
+
+1. Create: `files/non-production/<your-policy-name>.yaml`
+2. Same ClusterPolicy format as above.
+3. Install or upgrade with `policyProfile: non-production`.
+
+### Add a policy for both environments (common)
+
+1. Create: `files/common/<your-policy-name>.yaml`
+2. Same ClusterPolicy format.
+3. It will be installed for both production and non-production.
+
+**Requirements:** Each file must be a single ClusterPolicy. `metadata.name` must be unique across all policies. The chart will replace `validationFailureAction` with the value from `values.yaml` for every policy.
+
+---
+
+## Image registry configuration
+
+The **restrict-image-registries** policy (in common) limits which image registries can be used. Configure it via `values.yaml`.
+
+- Use **YAML lists** for registries; the chart joins them with ` | ` for Kyverno.
+- Do **not** put ` | ` inside a single string.
+
+**Correct:**
+
 ```yaml
 imageRegistries:
   global:
     - "registry.company.com:5000/*"
     - "registry.company.com:6000/*"
-    - "registry.company.com:7000/*"
 ```
 
-#### For Multiple Registry Types
+**Incorrect:**
+
+```yaml
+imageRegistries:
+  global:
+    - "registry.company.com:5000/* | registry.company.com:6000/*"  # wrong
+```
+
+You can override per container type:
+
 ```yaml
 imageRegistries:
   global:
     - "docker.io/*"
-    - "gcr.io/*"
-    - "quay.io/*"
-    - "registry.company.com/*"
-```
-
-#### For Specific Container Types Only
-```yaml
-imageRegistries:
   containers:
     - "docker.io/*"
     - "gcr.io/*"
   initContainers:
     - "docker.io/*"
-  ephemeralContainers: []
+    - "quay.io/*"
 ```
 
-### Troubleshooting
+Legacy `allowedRegistries` (single string with ` | `) is still supported but deprecated.
 
-**Error**: `Unknown image registry. Allowed registries: [tcr.paas.local:50??/* | tcr.paas.local:60??/* |tcr.paas.local:70??/*]`
+---
 
-**Cause**: You're passing a single string with ` | ` separators instead of a YAML list.
+## Troubleshooting
 
-**Incorrect**:
-```yaml
-imageRegistries:
-  global:
-    - "tcr.paas.local:50??/* | tcr.paas.local:60??/* | tcr.paas.local:70??/*"
-```
+**Error about “Unknown image registry” or allowed registries list looks wrong**  
+Use a YAML list for registries (one entry per line), not a single string containing ` | `.
 
-**Correct**:
-```yaml
-imageRegistries:
-  global:
-    - "tcr.paas.local:50??/*"
-    - "tcr.paas.local:60??/*"
-    - "tcr.paas.local:70??/*"
-```
+**Policies not applied**  
+Confirm Kyverno is running in the cluster and the release is installed in the expected namespace (e.g. `kyverno`). Check `policyProfile` matches the environment you want (production vs non-production).
 
-## Testing
-
-### Automated Testing Script
-
-A comprehensive testing script is provided to validate the image registry configuration functionality:
-
-```bash
-# Make the script executable
-chmod +x test-image-registry-config.sh
-
-# Run the automated tests
-./test-image-registry-config.sh
-```
-
-The testing script validates:
-- Default configuration behavior
-- Legacy `allowedRegistries` compatibility
-- Global `imageRegistries.global` configuration
-- Per-container-type configurations
-- Mixed configurations
-- Enforce mode functionality
-
-### Manual Testing
-
-You can also test configurations manually:
-
-#### 1. Test Chart Rendering
-```bash
-# Test with default values
-helm template test charts/dynamic-policies
-
-# Test with custom image registries (using YAML lists)
-helm template test charts/dynamic-policies \
-  --set imageRegistries.global[0]="docker.io/*" \
-  --set imageRegistries.global[1]="gcr.io/*" \
-  --set imageRegistries.initContainers[0]="docker.io/*" \
-  --set imageRegistries.initContainers[1]="gcr.io/*" \
-  --set imageRegistries.initContainers[2]="quay.io/*"
-
-# Test with legacy setting
-helm template test charts/dynamic-policies \
-  --set allowedRegistries="docker.io/* | gcr.io/*"
-```
-
-#### 2. Test Chart Linting
-```bash
-helm lint charts/dynamic-policies --values charts/dynamic-policies/values.yaml
-```
-
-#### 3. Test Installation (Dry Run)
-```bash
-helm install kyverno-policies charts/dynamic-policies \
-  --namespace kyverno \
-  --create-namespace \
-  --dry-run \
-  --set imageRegistries.global[0]="docker.io/*" \
-  --set imageRegistries.global[1]="gcr.io/*"
-```
-
-## Recent Changes
-
-### Version 0.2.1 - Fixed Image Registry Configuration
-
-**Bug Fixes:**
-- **Fixed YAML List Processing**: The `restrict_image_registries` policy now properly handles YAML lists for `imageRegistries` configuration
-- **Corrected Template Logic**: Added proper `join` function to convert YAML lists to Kyverno pattern format
-- **Improved Error Messages**: Better error messages that show the actual allowed registries
-
-**Configuration Fix:**
-- **YAML Lists Required**: `imageRegistries.global`, `imageRegistries.containers`, etc. now expect YAML lists
-- **Automatic Joining**: Lists are automatically joined with ` | ` for Kyverno pattern matching
-- **Clear Documentation**: Added troubleshooting section and examples
-
-**Example Fix:**
-```yaml
-# Before (Incorrect - caused validation errors)
-imageRegistries:
-  global:
-    - "tcr.paas.local:50??/* | tcr.paas.local:60??/* | tcr.paas.local:70??/*"
-
-# After (Correct - works properly)
-imageRegistries:
-  global:
-    - "tcr.paas.local:50??/*"
-    - "tcr.paas.local:60??/*"
-    - "tcr.paas.local:70??/*"
-```
-
-### Version 0.2.0 - Enhanced Image Registry Configuration
-
-**New Features:**
-- **Configurable Image Registries**: The `restrict_image_registries` policy now supports flexible configuration for different container types
-- **Per-Container-Type Control**: Configure different registry patterns for `containers`, `initContainers`, and `ephemeralContainers`
-- **Backward Compatibility**: Legacy `allowedRegistries` setting is still supported
-- **Enhanced Templating**: Improved Helm template processing for dynamic policy configuration
-
-**Configuration Options:**
-- `imageRegistries.global`: Set registry pattern for all container types
-- `imageRegistries.containers`: Override for regular containers
-- `imageRegistries.initContainers`: Override for init containers
-- `imageRegistries.ephemeralContainers`: Override for ephemeral containers
-- `allowedRegistries`: Legacy setting (deprecated but supported)
-
-**Testing:**
-- Added comprehensive testing script (`test-image-registry-config.sh`)
-- Automated validation of all configuration scenarios
-- Manual testing instructions provided
-
-## Policy Details
-
-The chart includes the following policies:
-
-1. `disallow-privileged-containers.yaml`: Prevents the creation of privileged containers
-2. `disallow-privilege-escalation.yaml`: Prevents privilege escalation in containers
-3. `require-run-as-non-root-user.yaml`: Enforces non-root user execution
-4. `disallow-capabilities.yaml`: Restricts container capabilities
-5. `restrict-apparmor-profiles.yaml`: Enforces AppArmor profile usage
-6. `restrict-seccomp-strict.yaml`: Enforces strict seccomp profiles
-7. `require_pod_requests_limits.yaml`: Enforces resource requests and limits
-8. `require_probes.yaml`: Enforces liveness and readiness probes
-9. `restrict-controlplane-scheduling.yaml`: Restricts control plane scheduling
-10. `restrict_node_port.yaml`: Restricts NodePort usage
-11. `disallow-host-ports.yaml`: Prevents host port usage
-12. `restrict-service-external-ips.yaml`: Restricts external IP usage
-13. `disallow_empty_ingress_host.yaml`: Prevents empty ingress hosts
-14. `disallow-host-path.yaml`: Prevents host path volume usage
-15. `restrict-volume-types.yaml`: Restricts volume types
-16. `disallow_cri_sock_mount.yaml`: Prevents CRI socket mounts
-17. `disallow-default-namespace.yaml`: Prevents default namespace usage
-18. `disallow-custom-snippets.yaml`: Restricts custom snippets
-19. `restrict_image_registries.yaml`: Restricts image registries (configurable per container type)
-20. `disallow-host-namespaces.yaml`: Prevents host namespace usage
-21. `disallow-proc-mount.yaml`: Prevents proc mount usage
-22. `disallow-selinux.yaml`: Prevents SELinux usage
-23. `require_drop_all.yaml`: Enforces dropping all capabilities
-24. `restrict-sysctls.yaml`: Restricts sysctl usage
+---
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome. Please open a Pull Request.
 
 ## License
 
-This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
+Apache License 2.0. See the LICENSE file for details.

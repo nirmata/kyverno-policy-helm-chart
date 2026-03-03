@@ -1,6 +1,15 @@
 # Default behavior of policies. Can be overridden via --set
 validationFailureAction: Audit
 
+# Policy profile: which set of Kyverno policies to install.
+# - "production": common policies + production-only policies (stricter, full compliance)
+# - "non-production": common policies + non-production-only policies (dev/test environments)
+# Common policies are always included and shared between both profiles.
+policyProfile: production
+
+# Set to false to install only common policies (no production/non-production profile policies).
+installProfilePolicies: true
+
 # Image registry restrictions configuration
 # You can configure registries for all container types or individually
 imageRegistries:

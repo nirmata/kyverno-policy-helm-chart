@@ -1,0 +1,2 @@
+{{- $c := .Files.Get "files/common/require-run-as-non-root-user.yaml" }}
+{{ trim (include "kyverno-policy.patchValidationFailureAction" (dict "content" ($c | toString) "context" .)) }}
