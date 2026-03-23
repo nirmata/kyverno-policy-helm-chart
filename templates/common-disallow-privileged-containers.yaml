@@ -1,2 +1,0 @@
-{{- $c := .Files.Get "files/common/disallow-privileged-containers.yaml" }}
-{{ trim (include "kyverno-policy.patchValidationFailureAction" (dict "content" ($c | toString) "context" .)) }}

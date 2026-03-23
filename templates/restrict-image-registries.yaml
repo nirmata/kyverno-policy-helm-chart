@@ -1,4 +1,4 @@
-{{- $c := .Files.Get "files/common/restrict_image_registries.yaml" }}
+{{- $c := .Files.Get "files/policies/restrict-image-registries.yaml" }}
 {{- $patched := regexReplaceAll "(?m)^([[:space:]]*)validationFailureAction:.*$" ($c | toString) (printf "${1}validationFailureAction: \"%s\"" .Values.validationFailureAction) }}
 {{- $globalPattern := .Values.allowedRegistries }}
 {{- if .Values.imageRegistries.global }}

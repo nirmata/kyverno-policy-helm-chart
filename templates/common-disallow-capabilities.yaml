@@ -1,5 +1,0 @@
-{{- if not (or (eq .Values.policyProfile "production") (eq .Values.policyProfile "non-production")) }}
-{{- fail (printf "policyProfile must be 'production' or 'non-production', got: %s" .Values.policyProfile) }}
-{{- end }}
-{{- $c := .Files.Get "files/common/disallow-capabilities.yaml" }}
-{{ trim (include "kyverno-policy.patchValidationFailureAction" (dict "content" ($c | toString) "context" .)) }}

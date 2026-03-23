@@ -1,2 +1,0 @@
-{{- $c := .Files.Get "files/common/require_drop_all.yaml" }}
-{{ trim (include "kyverno-policy.patchValidationFailureAction" (dict "content" ($c | toString) "context" .)) }}

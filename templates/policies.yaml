@@ -1,0 +1,13 @@
+{{- $root := . }}
+{{- $files := .Files.Glob "files/policies/*.yaml" }}
+{{- $needSep := false }}
+{{- range $path, $content := $files }}
+{{- if ne (base $path) "restrict-image-registries.yaml" }}
+{{- if $needSep }}
+---
+{{- end }}
+{{- $needSep = true }}
+{{- $policy := $content | toString }}
+{{ trim (include "kyverno-policy.patchValidationFailureAction" (dict "content" $policy "context" $root)) }}
+{{- end }}
+{{- end }}
