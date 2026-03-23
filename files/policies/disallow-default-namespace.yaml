@@ -26,9 +26,13 @@ spec:
               apiVersions: ["v1"]
               resources: ["pods"]
               operations: ["CREATE", "UPDATE"]
-            - apiGroups: ["apps", "batch"]
+            - apiGroups: ["apps"]
               apiVersions: ["v1"]
-              resources: ["daemonsets", "deployments", "jobs", "statefulsets"]
+              resources: ["daemonsets", "deployments", "statefulsets"]
+              operations: ["CREATE", "UPDATE"]
+            - apiGroups: ["batch"]
+              apiVersions: ["v1"]
+              resources: ["jobs"]
               operations: ["CREATE", "UPDATE"]
     validations:
         - expression: "has(object.metadata) && has(object.metadata.namespace) && object.metadata.namespace != 'default'"

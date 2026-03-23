@@ -118,7 +118,25 @@ Use a YAML list for registries (one entry per line), not a single string contain
 Confirm Kyverno is running and the release is in the expected namespace (e.g. `kyverno`).
 
 **`no matches for kind "GeneratingPolicy"`**  
-Install Kyverno with the **policies.kyverno.io** CRDs, or replace `add-ns-quota.yaml` with a **`ClusterPolicy`** that uses `generate` rules.
+This chart version does not include `GeneratingPolicy`. If you still see this error, your checkout or chart package is stale. Pull latest `main` and retry.
+
+**`validate-policy.kyverno.svc ... context deadline exceeded` during install**  
+Kyverno admission webhook is timing out while many policies are created. Typical recovery flow:
+
+```bash
+# 1) Remove failed release
+helm uninstall trinet-policies -n kyverno
+
+# 2) Increase Kyverno admission webhook timeout to 30s
+kubectl patch validatingwebhookconfiguration kyverno-policy-validating-webhook-cfg --type='json' -p='[{"op":"replace","path":"/webhooks/0/timeoutSeconds","value":30}]'
+kubectl patch mutatingwebhookconfiguration kyverno-policy-mutating-webhook-cfg --type='json' -p='[{"op":"replace","path":"/webhooks/0/timeoutSeconds","value":30}]'
+
+# 3) Scale admission controller before reinstall
+kubectl scale deploy kyverno-admission-controller -n kyverno --replicas=3
+
+# 4) Reinstall
+helm install trinet-policies . -n kyverno --timeout=10m --wait
+```
 
 ---
 
