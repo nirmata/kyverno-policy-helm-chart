@@ -1,82 +1,108 @@
-# Kyverno Policy Helm Chart
+# Kyverno policy Helm chart (`custom-kyverno-cpol`)
 
-A Helm chart that installs a **single catalog** of Kyverno policies for security and workload standards. All policy manifests live in **`files/policies/`**. Install mode is controlled by **`validationFailureAction`** in `values.yaml` (or `--set`): **Audit** (report only) or **Enforce** (block).
+Helm chart that installs a **single catalog** of Kyverno policies (pod security, workload defaults, deprecations, image registries, and related checks). Policy sources live in **`files/policies/`** (40 YAML files in this version).
+
+**Chart name:** `custom-kyverno-cpol` (see `Chart.yaml`).
 
 ## Prerequisites
 
-- Kubernetes cluster with **Kyverno** already installed (including CRDs for policy kinds you use, e.g. `policies.kyverno.io` **GeneratingPolicy** if you keep `add-ns-quota.yaml`).
-- **Helm 3**
+- Kubernetes cluster with **Kyverno** already installed, including CRDs for the policy kinds you use (**`ClusterPolicy`**, and **`ValidatingPolicy`** from `policies.kyverno.io` if those resources are in the catalog).
+- **Helm 3**.
+
+## What this chart does
+
+| Mechanism | Details |
+|-----------|---------|
+| **Bulk policies** | Renders every `files/policies/*.yaml` except `restrict-image-registries.yaml`, which is handled by a dedicated template. |
+| **`validationFailureAction`** | For manifests that contain a top-level `validationFailureAction:` line (typically **`ClusterPolicy`**), that line is **replaced** with the value from `values.yaml` / `--set`. |
+| **`ValidatingPolicy`** | Uses **`spec.validationActions`** in the YAML files. This chart **does not** rewrite those; edit the files or use Kyverno-native mechanisms if you need different actions. |
+| **Image registries** | `restrict-image-registries` is built from `files/policies/restrict-image-registries.yaml` with placeholders **`__GLOBAL_PATTERN__`**, **`__CONTAINERS_PATTERN__`**, etc., filled from `values.yaml`. |
+
+## Kyverno admission webhook timeout (before or during large installs)
+
+Installing many policies at once can exceed the default **10s** API-server timeout on Kyverno’s **policy** validating webhook (`kyverno-policy-validating-webhook-cfg`), which surfaces as timeouts or `context deadline exceeded` during `helm install`.
+
+**Recommended (persistent):** On the **Kyverno** release (not this chart), set the admission controller flag **`--webhookTimeout=30`**, for example:
+
+```yaml
+# In the Kyverno / N4K values.yaml used to install Kyverno
+admissionController:
+  container:
+    extraArgs:
+      webhookTimeout: "30"
+```
+
+Then upgrade Kyverno and confirm:
+
+```bash
+kubectl get validatingwebhookconfiguration kyverno-policy-validating-webhook-cfg \
+  -o jsonpath='{.webhooks[0].timeoutSeconds}{"\n"}'
+```
+
+**Note:** A **`config.webhooks.timeoutSeconds`** (or similar) value on some Kyverno charts is **not** the same as `timeoutSeconds` on the `ValidatingWebhookConfiguration`; it does not replace `--webhookTimeout`.
+
+**Emergency-only:** `kubectl patch` on the webhook object can help briefly, but Kyverno may **reconcile** webhooks and revert the value unless `webhookTimeout` is set on the controller.
 
 ## Installation
 
-Before installing the chart, increase Kyverno webhook timeouts (default 10s can be too low for many policies):
+### From the chart directory (local)
+
+From the repository root (the directory that contains `Chart.yaml`):
 
 ```bash
-kubectl patch validatingwebhookconfiguration kyverno-policy-validating-webhook-cfg --type='json' -p='[{"op": "replace", "path": "/webhooks/0/timeoutSeconds", "value": 30}]'
-kubectl patch mutatingwebhookconfiguration kyverno-policy-mutating-webhook-cfg --type='json' -p='[{"op": "replace", "path": "/webhooks/0/timeoutSeconds", "value": 30}]'
+helm install kyverno-policies . --namespace kyverno --create-namespace --timeout=10m --wait
 ```
 
 ### From a Helm repository
 
+Adjust the repo URL and chart reference to match your publishing setup, for example:
+
 ```bash
-helm repo add my-kyverno-cpol https://nirmata.github.io/kyverno-policy-helm-chart
+helm repo add kyverno-policies https://nirmata.github.io/kyverno-policy-helm-chart
 helm repo update
-helm install kyverno-policies my-kyverno-cpol/custom-kyverno-cpol --namespace kyverno --timeout=300s
+helm install kyverno-policies kyverno-policies/custom-kyverno-cpol \
+  --namespace kyverno --create-namespace --timeout=10m --wait
 ```
 
-### From the chart in this repo (local path)
+### Audit vs enforce (`ClusterPolicy` only)
 
-Run from the repository root (this directory is the chart). This installs **all** policies under `files/policies/` (~40 resources, depending on chart version).
+Default is **Audit** (see `values.yaml`). To **block** violating resources for policies that use `validationFailureAction`:
 
 ```bash
-helm install kyverno-policies . --namespace kyverno --timeout=300s
+helm install kyverno-policies . --namespace kyverno \
+  --set validationFailureAction=Enforce --timeout=10m --wait
 ```
 
-#### Audit vs Enforce
-
-Policies default to **Audit** (report only). Set **`validationFailureAction`** to **Enforce** to block violating resources:
+Upgrades:
 
 ```bash
-helm install kyverno-policies . --namespace kyverno --set validationFailureAction=Enforce --timeout=300s
+helm upgrade kyverno-policies . --namespace kyverno --timeout=10m --wait
 ```
 
-Or set `validationFailureAction: Enforce` in `values.yaml` before install or upgrade.
-
-**Note:** The chart rewrites `spec.validationFailureAction` on **`ClusterPolicy`** resources from `values.yaml`. **`ValidatingPolicy`** resources use `spec.validationActions` in the YAML (not overridden by this chart). **`GeneratingPolicy`** (`add-ns-quota`) does not use `validationFailureAction`.
-
----
-
-## Configuration
+## Configuration (`values.yaml`)
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `validationFailureAction` | `Audit` or `Enforce` for **ClusterPolicy** resources (from `values.yaml` / `--set`) | `Audit` |
-| `imageRegistries.global` | Allowed image registries for all container types (YAML list) | See `values.yaml` |
-| `imageRegistries.containers` | Override for containers | `[]` (uses global) |
-| `imageRegistries.initContainers` | Override for initContainers | `[]` (uses global) |
-| `imageRegistries.ephemeralContainers` | Override for ephemeralContainers | `[]` (uses global) |
-| `allowedRegistries` | Legacy single string (deprecated) | See `values.yaml` |
-
-**How installation works:** The chart renders every `*.yaml` file in **`files/policies/`**. **`restrict-image-registries.yaml`** is templated separately so registry allow-patterns from `values.yaml` replace placeholders. All other files get `validationFailureAction` patched from `values.yaml` when the field is present.
-
----
+| `validationFailureAction` | `Audit` or `Enforce` for lines named `validationFailureAction` in rendered policy YAML (primarily **`ClusterPolicy`**) | `Audit` |
+| `imageRegistries.global` | Registry allow patterns as a **YAML list** (joined with ` \| ` for Kyverno) | See `values.yaml` |
+| `imageRegistries.containers` | Override list for containers | `[]` (inherits global) |
+| `imageRegistries.initContainers` | Override list for init containers | `[]` |
+| `imageRegistries.ephemeralContainers` | Override list for ephemeral containers | `[]` |
+| `allowedRegistries` | Legacy single string with ` \| ` separators | Deprecated; prefer `imageRegistries.global` |
 
 ## Policy catalog
 
-Everything is in **`files/policies/`**—there are no separate production vs non-production folders. Add or remove policies by editing that directory (one Kubernetes resource per file; unique `metadata.name`).
+All policies are under **`files/policies/`** (one primary Kubernetes resource per file; unique `metadata.name` per policy).
 
-The catalog includes the shared baseline (pod security, image registry, quotas, deprecations, etc.), **`add-ns-quota`** (GeneratingPolicy), and additional checks that previously lived under a separate “non-production” folder (ephemeral storage checks, evicted pods, remediation policy), merged into this single set.
+This revision includes a mix of **`ClusterPolicy`** and **`ValidatingPolicy`** resources. To extend the catalog, add or remove `.yaml` files there. No template change is required unless you need new Helm logic (as for `restrict-image-registries`).
 
----
+**Deprecated APIs policy:** `check-deprecated-apis` matches APIs that were removed or migrated across Kubernetes versions. **`PodSecurityPolicy`** is **not** listed under `match.kinds` because the API is removed in Kubernetes **1.25+**; including it caused admission warnings (`unable to convert GVK to GVR … resource not found`) on modern clusters.
 
-## Image registry configuration
+## Image registry policy
 
-The **restrict-image-registries** policy limits which image registries can be used. Configure it via `values.yaml`.
+Configure **`imageRegistries`** with **one pattern per list element**. Do not embed ` \| ` inside a single string.
 
-- Use **YAML lists** for registries; the chart joins them with ` | ` for Kyverno.
-- Do **not** put ` | ` inside a single string.
-
-**Correct:**
+**Good:**
 
 ```yaml
 imageRegistries:
@@ -85,65 +111,45 @@ imageRegistries:
     - "registry.company.com:6000/*"
 ```
 
-**Incorrect:**
+**Bad:**
 
 ```yaml
 imageRegistries:
   global:
-    - "registry.company.com:5000/* | registry.company.com:6000/*"  # wrong
+    - "registry.company.com:5000/* | registry.company.com:6000/*"
 ```
 
-You can override per container type with `imageRegistries.containers`, `imageRegistries.initContainers`, and `imageRegistries.ephemeralContainers`. Legacy `allowedRegistries` (single string with ` | `) is supported but deprecated.
+## Adding policies
 
----
-
-## Adding more Kyverno policies
-
-Add a new **`.yaml` file** under **`files/policies/`** with a single Kyverno resource. No template changes are required unless you need custom Helm logic.
-
-**Requirements:**
-
-- Each file is one policy object. Most are **`ClusterPolicy`** (`kyverno.io/v1`). **`add-ns-quota`** is a **`GeneratingPolicy`** (`policies.kyverno.io/v1`) per the [upstream gpol sample](https://github.com/nirmata/kyverno-policies/blob/main/sample/eko-test-data/gpol-policies/add-ns-quota.yaml); that API requires the matching CRDs.
-- For **`ClusterPolicy`**, include `spec.validationFailureAction` in the file; the chart overwrites it from `values.yaml`.
-- `metadata.name` must be unique across all policies.
-
----
+1. Add a new `.yaml` under **`files/policies/`** with one Kyverno policy resource.
+2. Ensure **`metadata.name`** is unique in the catalog.
+3. For **`ClusterPolicy`**, you may include `spec.validationFailureAction`; the chart overwrites matching `validationFailureAction:` lines from `values.yaml`.
+4. For **`ValidatingPolicy`**, set **`spec.validationActions`** in the file; the chart does not change it.
 
 ## Troubleshooting
 
-**"Unknown image registry" or allowed registries list looks wrong**  
-Use a YAML list for registries (one entry per line), not a single string containing ` | `.
+**`Unknown image registry` or wrong allow list**  
+Use YAML lists for registries, not one string with ` \| `.
 
-**Policies not applied**  
-Confirm Kyverno is running and the release is in the expected namespace (e.g. `kyverno`).
+**`context deadline exceeded` / webhook timeouts during `helm install`**  
+Raise Kyverno **`--webhookTimeout`** (see above). Use a generous **`--timeout`** and **`--wait`** only after the admission webhook can sustain the apply burst.
+
+**Client warnings during install (non-fatal if release is `deployed`)**  
+Helm may print Kubernetes warnings such as:
+
+- **`kyverno-reports-controller` … `Node` … get/list/watch** — the reports controller may need RBAC to **`nodes`** for some policies or reports; extend the Kyverno chart’s reports-controller **`ClusterRole`** if your vendor docs require it.
+- **`PodSecurityPolicy` / GVR** — should not appear if the chart’s `check-deprecated-apis` policy omits PSP in `match.kinds` (current behavior). Upgrade this chart or re-apply policies if you still see it.
+
+**Policies not evaluating**  
+Confirm Kyverno pods are healthy and policies are not excluded by Kyverno **`ConfigMap`** `resourceFilters`.
 
 **`no matches for kind "GeneratingPolicy"`**  
-This chart version does not include `GeneratingPolicy`. If you still see this error, your checkout or chart package is stale. Pull latest `main` and retry.
-
-**`validate-policy.kyverno.svc ... context deadline exceeded` during install**  
-Kyverno admission webhook is timing out while many policies are created. Typical recovery flow:
-
-```bash
-# 1) Remove failed release
-helm uninstall trinet-policies -n kyverno
-
-# 2) Increase Kyverno admission webhook timeout to 30s
-kubectl patch validatingwebhookconfiguration kyverno-policy-validating-webhook-cfg --type='json' -p='[{"op":"replace","path":"/webhooks/0/timeoutSeconds","value":30}]'
-kubectl patch mutatingwebhookconfiguration kyverno-policy-mutating-webhook-cfg --type='json' -p='[{"op":"replace","path":"/webhooks/0/timeoutSeconds","value":30}]'
-
-# 3) Scale admission controller before reinstall
-kubectl scale deploy kyverno-admission-controller -n kyverno --replicas=3
-
-# 4) Reinstall
-helm install trinet-policies . -n kyverno --timeout=10m --wait
-```
-
----
+This catalog does not ship `GeneratingPolicy`. If the error appears, your client or chart version may be out of sync with the cluster CRDs; align Kyverno / CRD versions with the policy kinds you install.
 
 ## Contributing
 
-Contributions are welcome. Please open a Pull Request.
+Pull requests are welcome.
 
 ## License
 
-Apache License 2.0. See the LICENSE file for details.
+Apache License 2.0 (see the repository’s license terms if a `LICENSE` file is present).

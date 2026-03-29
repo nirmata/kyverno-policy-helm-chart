@@ -28,13 +28,13 @@ spec:
     match:
       any:
       - resources:
-          # NOTE: PodSecurityPolicy is completely removed in 1.25.
+          # NOTE: PodSecurityPolicy was removed in 1.25; omitting it from kinds avoids
+          # "unable to convert GVK to GVR ... resource not found" on modern clusters.
           kinds:
           - batch/*/CronJob
           - discovery.k8s.io/*/EndpointSlice
           - events.k8s.io/*/Event
           - policy/*/PodDisruptionBudget
-          - policy/*/PodSecurityPolicy
           - node.k8s.io/*/RuntimeClass
     preconditions:
       all:
